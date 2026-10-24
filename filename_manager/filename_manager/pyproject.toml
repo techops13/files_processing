@@ -1,0 +1,6 @@
+[project]
+name = "filename-manager"
+version = "1.0.0"
+description = "Offline, cross-platform filename cleanup and batch renaming CLI"
+requires-python = ">=3.9"
+dependencies = []

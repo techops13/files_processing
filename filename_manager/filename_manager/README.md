@@ -1,0 +1,134 @@
+# Filename Manager v1.0
+
+Offline, cross-platform Python command-line utility for recursively renaming filenames. It can **remove**, **replace**, **add a prefix**, or **add a suffix**. By default **no files are changed** (dry run).
+
+## Requirements
+
+- Python **3.9 or newer** (Python 3.12+ recommended).
+- macOS, Windows, or Linux.
+- **No third-party libraries, package downloads, or network connection** needed to run the tool.
+- Read/write permission for directories you choose to modify.
+
+`requirements.txt` is intentionally empty of installable packages. `pyproject.toml` records the Python version and dependency metadata. Run the Python script directly; no `pip install` or packaging/build tools needed.
+
+## Setup from Git
+
+```bash
+git clone <YOUR_REPOSITORY_URL>
+cd filename-manager
+```
+
+If you don't have Git, simply download and extract the repository ZIP.
+
+Optional project virtual environment (recommended for consistent local development):
+
+**macOS / Linux**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python --version
+python filename_manager.py --help
+```
+
+**Windows PowerShell**
+
+```powershell
+py -3 -m venv venv
+.\venv\Scripts\Activate.ps1
+python --version
+python filename_manager.py --help
+```
+
+If PowerShell prevents activation, you can run ` .\venv\Scripts\python.exe filename_manager.py --help` directly.
+
+On systems where Python is not installed, install Python 3.9+ from https://www.python.org/downloads/ (on Windows, enable the PATH option if offered). On macOS, `brew install python` is an alternative; on Debian/Ubuntu use `sudo apt install python3 python3-venv`.
+
+No dependency installation is necessary. `python -m pip install -r requirements.txt` is optional and installs nothing.
+
+## Usage
+
+Start interactive mode:
+
+```bash
+python filename_manager.py
+```
+
+Noninteractive dry run — remove `filanem.st_` recursively:
+
+```bash
+python filename_manager.py "/path/to/books" --action remove --find "filanem.st_"
+```
+
+Apply the renames only after reviewing the preview:
+
+```bash
+python filename_manager.py "/path/to/books" --action remove --find "filanem.st_" --apply
+```
+
+Replace text:
+
+```bash
+python filename_manager.py "/path/to/books" --action replace --find "old" --with-text "new" --apply
+```
+
+Add text to a filename (without changing extensions):
+
+```bash
+python filename_manager.py "/path/to/books" --action prefix --with-text "Book_" --apply
+python filename_manager.py "/path/to/books" --action suffix --with-text "_reviewed" --apply
+```
+
+On macOS / Linux, use `python3` if `python` is not mapped to Python 3. On Windows, use `py -3` in place of `python` if necessary. Quote paths containing spaces.
+
+## Options
+
+| Option | Meaning |
+| --- | --- |
+| `--action remove\|replace\|prefix\|suffix` | Operation to run |
+| `--find TEXT` | String to find for remove or replace |
+| `--with-text TEXT` | New text for replace/prefix/suffix |
+| `--apply` | Actually rename; otherwise dry run |
+| `--case sensitive\|insensitive` | Case matching (defaults to sensitive) |
+| `--keep-leading-symbols` | Do not trim leading punctuation/symbols after removing text |
+| `--no-recursive` | Only process files in the selected folder |
+| `--include-hidden` | Include hidden files and folders |
+| `--log-dir PATH` | Save per-run logs to chosen directory (default `./logs`) |
+| `--help` | Show command help |
+
+### Leading-symbol cleanup
+
+Removing `filanem.st` from `filanem.st_978-3-032-24372-0.rar` yields `978-3-032-24372-0.rar`: leading `_`, whitespace, and other punctuation/symbols are automatically removed **only for the remove action**. Interior hyphens in the ISBN are preserved. Other actions do not trim symbols by default.
+
+### Safety and limitations
+
+- Dry-run default; explicit `--apply` required to rename.
+- Operates on **filenames**, not folders; scans child folders by default.
+- Preserves filename extensions, including common compound extensions like `.tar.gz`.
+- Skips hidden files/folders by default; skips symlinks.
+- Will not overwrite existing destination names; reports collisions/conflicts, using exit code 2.
+- Skips invalid or empty resulting names.
+- A unique timestamped log is created every run in the `logs/` directory unless configured otherwise; logs are ignored by Git.
+- Renaming within the same filesystem ordinarily preserves file contents and metadata; directory timestamps may change. Back up important collections before applying bulk changes.
+- Case-insensitive filename collisions may behave differently across filesystems. Test on a small sample first.
+
+## Run tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## Git publishing
+
+Create an empty **private** repository on your chosen Git server or GitHub and then from this directory:
+
+```bash
+git init
+git add .
+git commit -m "Add cross-platform filename manager v1.0"
+git branch -M main
+git remote add origin <YOUR_REPOSITORY_URL>
+git push -u origin main
+```
+
+Make sure not to commit private book collections or log files. Verify `git status` and `git diff --cached --stat` before pushing.
