@@ -1,3 +1,8 @@
+## v1.1.1 — Terminal inventory presentation
+- Added grouped, aligned, optional ANSI-colored Phase 0 dashboard with counts, total GiB, and duration.
+- Honors `--no-color`, `NO_COLOR`, non-TTY output, and `logging.console_colors = false`.
+- Plain-text and JSON reports remain free of ANSI escape sequences.
+
 # Changelog
 
 ## [1.1.0] - 2026-10-25

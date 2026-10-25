@@ -111,3 +111,20 @@ class InventoryTests(unittest.TestCase):
         self.assertIn('and 15 more',shortened)
         self.assertNotIn('chapter19.mp3',shortened)
         self.assertIn('chapter19.mp3',detail)
+
+
+class InventoryDashboardTests(unittest.TestCase):
+    def test_plain_dashboard_counts_and_no_ansi(self):
+        from archive_extractor import format_pre_run_dashboard
+        inv={'categories':{'archives':107,'books':312}, 'extensions':{'.rar':97,'.7z':6,'.zip':4,'.epub':189,'.pdf':118,'.mobi':5},
+             'total_files':419,'directories':2,'total_bytes':13418262094,'scan_duration_seconds':0.007}
+        txt=format_pre_run_dashboard(inv,Path('/tmp/test'),'DRY_RUN',color=False)
+        self.assertIn('419',txt)
+        self.assertIn('ARCHIVE FORMATS',txt)
+        self.assertIn('BOOK FORMATS',txt)
+        self.assertIn('12.50 GiB',txt)
+        self.assertNotIn('\033[',txt)
+    def test_ansi_dashboard(self):
+        from archive_extractor import format_pre_run_dashboard
+        inv={'categories':{'archives':1}, 'extensions':{'.rar':1},'total_files':1,'directories':0,'total_bytes':0,'scan_duration_seconds':0.003}
+        self.assertIn('\033[',format_pre_run_dashboard(inv,Path('/tmp'),'DRY_RUN',color=True))

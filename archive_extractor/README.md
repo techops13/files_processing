@@ -116,3 +116,7 @@ future refinements.
 **Safety:** Dry run is still the default, PDF > EPUB > MOBI > AZW3 > DJVU/DJV
 priority is unchanged, and any archive with disallowed media is skipped in
 full. This release does not add multipart extraction or change password handling.
+
+### Inventory dashboard (v1.1.1)
+
+Phase 0 prints a grouped, aligned archive/book/other inventory with colored headings on interactive ANSI terminals. Colors are automatically disabled when output is redirected, when `NO_COLOR` is set, or with `--no-color`. Logs and inventory reports never include ANSI color codes.

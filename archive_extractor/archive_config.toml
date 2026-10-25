@@ -35,3 +35,5 @@ indent_details = true
 show_archive_progress = true
 show_skip_reason = true
 show_processing_duration = true
+
+# The [logging] console_colors setting controls ANSI colors in Phase 0 too.

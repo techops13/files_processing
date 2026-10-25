@@ -231,6 +231,42 @@ def pre_run_inventory(directory, out, logs_dir):
             'categories':dict(groups),'extensions':dict(sorted(exts.items()))}
 
 
+def format_pre_run_dashboard(inventory, directory, mode, color=False):
+    """Readable, width-stable pre-run inventory; optional ANSI only for terminals."""
+    codes={'title':'\033[1;96m','heading':'\033[1;94m','archive':'\033[94m',
+           'book':'\033[92m','warn':'\033[93m','label':'\033[2m'}
+    def styled(value, kind):
+        return f"{codes[kind]}{value}\033[0m" if color else value
+    def line():return '─'*60
+    def metric(label,value):return f"  {label:<24} {value:>18}"
+    groups=inventory['categories']; extensions=inventory['extensions']
+    archive_exts=[];book_exts=[];other_exts=[]
+    for ext,count in extensions.items():
+        if ext in ARCHIVE_SUFFIXES or ext=='.multipart': archive_exts.append((ext,count))
+        elif ext in BOOK:book_exts.append((ext,count))
+        else:other_exts.append((ext,count))
+    result=['',styled('  ARCHIVE EXTRACTOR  |  PHASE 0 — PRE-RUN INVENTORY','title'),
+            styled('  '+line(),'label'),f'  Directory : {directory}',f'  Mode      : {mode}',
+            '',styled('  OVERVIEW','heading'),
+            metric('Total files',f"{inventory['total_files']:,}"),
+            metric('Directories',f"{inventory['directories']:,}"),
+            metric('Archive files',f"{groups.get('archives',0):,}"),
+            metric('Book files (on disk)',f"{groups.get('books',0):,}"),
+            metric('Other files',f"{sum(v for k,v in groups.items() if k not in ('books','archives')):,}"),
+            metric('Total size',f"{inventory['total_bytes']/1024**3:,.2f} GiB"),
+            metric('Scan time',f"{inventory['scan_duration_seconds']:.3f} s")]
+    for title,rows,kind in [('ARCHIVE FORMATS',archive_exts,'archive'),
+                             ('BOOK FORMATS',book_exts,'book'),
+                             ('OTHER FILE TYPES',other_exts,'warn')]:
+        if not rows:continue
+        result.extend(['',styled('  '+title,'heading'),styled('  '+line(),'label')])
+        for ext,count in sorted(rows,key=lambda row:(-row[1],row[0])):
+            result.append(f"  {styled(ext,kind):<0}"+f"{' ' * max(1,26-len(ext))}{count:>12,}")
+    result.extend(['',styled('  '+line(),'label'),
+                   styled('  Inventory complete • counts exclude archive contents','book'), ''])
+    return '\n'.join(result)
+
+
 def write_pre_inventory(data,logs):
     (logs/'pre_run_inventory.json').write_text(json.dumps(data,indent=2)+'\n',encoding='utf8')
     with (logs/'pre_run_inventory.csv').open('w',newline='',encoding='utf-8-sig') as f:
@@ -279,23 +315,21 @@ def run(argv=None):
     try:logs.mkdir(parents=True,exist_ok=False)
     except FileExistsError:logs=ROOT/'logs'/(runid+f'-{os.getpid()}');logs.mkdir(parents=True)
     logfile=logs/'archive_extractor.log';jsonfile=logs/'archive_extractor.jsonl'
-    emit=lambda level,msg,console_message=None,**ctx:log_line(logfile,jsonfile,level,msg,ctx,not args.no_color and sys.stdout.isatty(),console_message)
+    emit=lambda level,msg,console_message=None,**ctx:log_line(logfile,jsonfile,level,msg,ctx,not args.no_color and 'NO_COLOR' not in os.environ and config.get('logging',{}).get('console_colors',True) and sys.stdout.isatty(),console_message)
     timeout=config['verification']['timeout_seconds']
     out=(directory/config['general']['stage_directory']).resolve()
     if not out.is_relative_to(directory) or out==directory:
         emit('SHOWSTOPPER','Unsafe stage_directory configuration');return 2
     mode='INVENTORY_ONLY' if args.inventory_only else ('STAGE' if args.stage else 'DRY_RUN')
     emit('INFO',f'Run {runid} started {start.isoformat()}, mode={mode}')
-    print('\n'+'='*64+'\nPHASE 0 — PRE-RUN FILE INVENTORY\n'+'='*64)
     inv_start=time.monotonic()
     inventory=pre_run_inventory(directory,out,ROOT/'logs')
     inventory['scan_duration_seconds']=round(time.monotonic()-inv_start,3)
     write_pre_inventory(inventory,logs)
-    print(f"Directory   : {directory}\nDirectories : {inventory['directories']}\nFiles       : {inventory['total_files']}\nTotal bytes : {inventory['total_bytes']:,}\nScan time   : {inventory['scan_duration_seconds']:.3f}s")
-    print('Categories  : '+', '.join(f'{k}={v}' for k,v in sorted(inventory['categories'].items())))
-    print('\nFILE TYPES (on disk, not contents inside archives)')
-    for ext,n in inventory['extensions'].items():print(f'  {ext:<17} {n:>8,}')
-    print('='*64+'\n')
+    console_color=(not args.no_color and 'NO_COLOR' not in os.environ
+                   and config.get('logging',{}).get('console_colors',True)
+                   and sys.stdout.isatty())
+    print(format_pre_run_dashboard(inventory,directory,mode,color=console_color))
     emit('INFO','Pre-run inventory complete', inventory=inventory)
     if args.inventory_only:
         end=datetime.now().astimezone();elapsed=round(time.monotonic()-tick,3)
