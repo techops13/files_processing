@@ -21,7 +21,6 @@ def parse_args():
     p.add_argument('--apply', action='store_true', help='Actually rename files (otherwise dry run)')
     p.add_argument('--on-conflict', choices=['suffix', 'skip'], default='suffix',
                    help='If target exists, add [dup2], [dup3], etc. or skip')
-    p.add_argument('--keep-leading-symbols', action='store_true', help='Preserve edge symbols (both leading and trailing) after remove; legacy flag name')
     p.add_argument('--no-recursive', action='store_true', help='Only scan selected directory')
     p.add_argument('--include-hidden', action='store_true', help='Include hidden files and directories')
     p.add_argument('--log-dir', help='Where to store the logfile (default: current working directory/logs)')
@@ -59,15 +58,37 @@ def replace_text(name, old, new, insensitive):
 
 
 def trim_edge_symbols(value):
-    """Trim both ends of a filename stem to its outermost Unicode letter or number.
+    """Clean name edges while moving leading [...] metadata to the end.
 
-    Preserve punctuation inside the stem, including ISBN hyphens.
+    Underscores are valid inside the name but not at its edges. Complete
+    bracket groups at the end are preserved (including empty [] groups).
     """
-    first = next((i for i, ch in enumerate(value) if ch.isalnum()), len(value))
-    if first == len(value):
-        return ""
-    last = next(i for i in range(len(value) - 1, first - 1, -1) if value[i].isalnum())
-    return value[first:last + 1]
+    leading_groups = []
+    rest = value
+    # Ignore leading edge punctuation, but retain bracket groups for moving.
+    while True:
+        rest = rest.lstrip()  # leading spaces
+        while rest and not rest[0].isalnum() and rest[0] != '[':
+            rest = rest[1:]
+        match = re.match(r'^\[([^\[\]]*)\]', rest)
+        if not match:
+            break
+        leading_groups.append(match.group(0))
+        rest = rest[match.end():]
+
+    # Strip edge noise after a closing bracket without stripping that bracket.
+    while rest and not rest[-1].isalnum() and rest[-1] != ']':
+        rest = rest[:-1]
+    # Preserve complete bracket groups already at the end of the stem.
+    trailing = re.search(r'(?:\s*\[[^\[\]]*\])+$', rest)
+    ending_groups = re.findall(r'\[[^\[\]]*\]', trailing.group(0)) if trailing else []
+    core = rest[:trailing.start()] if trailing else rest
+    first = next((i for i, ch in enumerate(core) if ch.isalnum()), len(core))
+    if first == len(core):
+        return ''  # avoid metadata-only filenames with no base title
+    last = next(i for i in range(len(core) - 1, first - 1, -1) if core[i].isalnum())
+    core = core[first:last + 1]
+    return core + ''.join(' ' + group for group in ending_groups + leading_groups)
 
 
 def transformed(name, args):
@@ -80,14 +101,14 @@ def transformed(name, args):
     stem = name[:-len(ext)] if ext else name
     if args.action == 'remove':
         stem = replace_text(stem, args.find, '', args.case == 'insensitive')
-        if not args.keep_leading_symbols:
-            stem = trim_edge_symbols(stem)
     elif args.action == 'replace':
         stem = replace_text(stem, args.find, args.with_text, args.case == 'insensitive')
     elif args.action == 'prefix':
         stem = args.with_text + stem
     elif args.action == 'suffix':
         stem = stem + args.with_text
+    # Universal filename hygiene, even if the requested search text is absent.
+    stem = trim_edge_symbols(stem)
     return stem + ext if stem else None
 
 
@@ -130,7 +151,7 @@ def main():
     stamp = dt.datetime.now().strftime('%Y-%b-%d_%H%M%S_%f')
     log_path = log_dir / f'filename_manager_{stamp}.log'
     logging.basicConfig(filename=log_path, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', encoding='utf-8')
-    logging.info('Directory=%s action=%s apply=%s case=%s recursive=%s trim_edge_symbols=%s', root, args.action, args.apply, args.case, not args.no_recursive, not args.keep_leading_symbols)
+    logging.info('Directory=%s action=%s apply=%s case=%s recursive=%s universal_edge_cleanup=True', root, args.action, args.apply, args.case, not args.no_recursive)
     files = []
     for current, dirs, names in os.walk(root, followlinks=False):
         if not args.include_hidden:

@@ -1,4 +1,4 @@
-# Filename Manager v1.2
+# Filename Manager v2.1
 
 Offline, cross-platform Python command-line utility for recursively renaming filenames. It can **remove**, **replace**, **add a prefix**, or **add a suffix**. By default **no files are changed** (dry run).
 
@@ -90,16 +90,14 @@ On macOS / Linux, use `python3` if `python` is not mapped to Python 3. On Window
 | `--with-text TEXT` | New text for replace/prefix/suffix |
 | `--apply` | Actually rename; otherwise dry run |
 | `--case sensitive\|insensitive` | Case matching (defaults to sensitive) |
-| `--keep-leading-symbols` | Do not trim leading punctuation/symbols after removing text |
 | `--no-recursive` | Only process files in the selected folder |
 | `--include-hidden` | Include hidden files and folders |
 | `--log-dir PATH` | Save per-run logs to chosen directory (default `./logs`) |
 | `--on-conflict suffix\|skip` | Automatically assign `[dup2]`, `[dup3]` (default), or skip conflicting names |
 | `--help` | Show command help |
 
-### Leading-symbol cleanup
+### Universal filename cleanup
 
-Removing `filanem.st` from `filanem.st_978-3-032-24372-0.rar` yields `978-3-032-24372-0.rar`: leading `_`, whitespace, and other punctuation/symbols are automatically removed **only for the remove action**. Interior hyphens in the ISBN are preserved. Other actions do not trim symbols by default.
 
 ### Safety and limitations
 
@@ -150,10 +148,33 @@ python filename_manager.py /path/to/books --action remove --find 'test.st_' --on
 
 This resolves **filename collisions**, not identical content. Two files may have identical bytes; use a separate hash-based duplicate checker if you want to identify or delete truly redundant copies.
 
-## Edge cleanup (v1.2)
+## Universal filename hygiene (v2.1)
 
 After a **remove** operation, filename stems are trimmed on **both ends** until they begin and end with a Unicode letter or digit. The file extension is preserved and internal punctuation (including ISBN hyphens) remains unchanged.
 
 Example: `979-8-8688-2083-0.filename.tt.pdf` with `--find filename.tt` becomes `979-8-8688-2083-0.pdf`, not `979-8-8688-2083-0..pdf`.
 
-The existing `--keep-leading-symbols` flag disables **both** leading and trailing symbol cleanup in this release for backward compatibility. Replacement, prefix, and suffix operations do not apply this cleanup. Dry run remains the default.
+
+
+### Universal filename hygiene (v2.1.0)
+
+For every file scanned, every operation trims punctuation, symbols, and whitespace **before the first letter/number and after the last letter/number of the filename stem**. This includes files where the search text is not found. Extensions remain unchanged, and internal dots, hyphens, spaces and other punctuation remain unchanged. Examples: `.._Book--.pdf` → `Book.pdf`; `979-8-8688-2083-0.filename.tt.pdf` after removing `filename.tt` → `979-8-8688-2083-0.pdf`. If cleanup empties the stem, the file is skipped. Dry run is still the default. The `--keep-leading-symbols` option is no longer supported.
+
+## Bracket metadata convention (v2.1)
+
+The script moves any complete leading `[metadata]` groups to the end of the
+filename stem, immediately before its extension. Existing trailing bracketed
+metadata, such as `[2026]`, `[2nd Edition]`, `[]`, and `[dup2]`, remains intact.
+Underscores are permitted inside names but removed from the beginning and end.
+This sanitation applies to every operation, including files without a search match.
+
+Examples:
+
+```text
+[2026]Book.pdf                       -> Book [2026].pdf
+[2026] Publisher -- Book [3rd Edition].pdf -> Publisher -- Book [3rd Edition] [2026].pdf
+_[2026]_My_Book_.epub                -> My_Book [2026].epub
+Book [2026]_.pdf                     -> Book [2026].pdf
+```
+
+Use the default dry run before `--apply`, especially on large archives.

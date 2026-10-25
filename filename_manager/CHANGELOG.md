@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.1.0 — 2026-10-24
+
+- Move complete leading bracketed metadata groups to just before the file extension, without losing their contents.
+- Preserve trailing bracket groups, including `[]`, `[2026]`, and `[dup2]`.
+- Remove leading/trailing underscores and other unwanted edge symbols while preserving internal underscores and punctuation.
+- Continue universal cleanup across Remove, Replace, Prefix, and Suffix, with safe duplicate naming.
+- Add regression tests for moved metadata, paired brackets, and symbol cleanup.
+
+
+## v2.0.0 — 2026-10-24
+
+- Enforce automatic leading and trailing symbol cleanup for **all** actions (remove, replace, prefix, suffix), including files with no matching search text.
+- Preserve punctuation inside the name and preserve file extensions.
+- Remove `--keep-leading-symbols` override so filename hygiene is universal; breaking change.
+- Keep dry-run default and safe duplicate suffix behavior.
+- Add universal-cleanup regression tests.
+
 ## v1.2.0 — 2026-10-24
 
 - Trim trailing as well as leading punctuation and symbols from filename stems after remove operations.
