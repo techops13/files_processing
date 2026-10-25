@@ -33,3 +33,9 @@ class FilenameManagerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class DuplicateNamingTests(unittest.TestCase):
+    def test_duplicate_sequence(self):
+        from filename_manager import duplicate_name
+        self.assertEqual(duplicate_name('1.epub', 2), '1 [dup2].epub')
+        self.assertEqual(duplicate_name('backup.tar.gz', 3), 'backup [dup3].tar.gz')

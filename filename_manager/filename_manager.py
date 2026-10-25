@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import logging
 import os
+import re
 from pathlib import Path
 
 
@@ -18,6 +19,8 @@ def parse_args():
     p.add_argument('--with-text', default=None, help='Replacement text, or text to prepend/append')
     p.add_argument('--case', choices=['sensitive', 'insensitive'], default=None)
     p.add_argument('--apply', action='store_true', help='Actually rename files (otherwise dry run)')
+    p.add_argument('--on-conflict', choices=['suffix', 'skip'], default='suffix',
+                   help='If target exists, add [dup2], [dup3], etc. or skip')
     p.add_argument('--keep-leading-symbols', action='store_true', help='Disable automatic removal of leading symbols after a remove operation')
     p.add_argument('--no-recursive', action='store_true', help='Only scan selected directory')
     p.add_argument('--include-hidden', action='store_true', help='Include hidden files and directories')
@@ -84,6 +87,23 @@ def transformed(name, args):
     return stem + ext if stem else None
 
 
+def duplicate_name(name, number):
+    """Insert a duplicate marker before the final or known compound extension."""
+    compound = ('.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst')
+    ext = next((name[-len(e):] for e in compound if name.lower().endswith(e)), None)
+    if ext is None:
+        ext = Path(name).suffix
+    stem = name[:-len(ext)] if ext else name
+    # Avoid producing a second duplicate marker if the cleaned filename already has one.
+    stem = re.sub(r' \[dup\d+\]$', '', stem, flags=re.IGNORECASE)
+    return f'{stem} [dup{number}]{ext}'
+
+
+def destination_taken(dst, reserved):
+    """Case-folding also protects likely cross-platform / macOS case-insensitive clashes."""
+    return dst.exists() or str(dst).casefold() in reserved
+
+
 def main():
     args = parse_args()
     # Fully specified automated calls never prompt.
@@ -123,9 +143,10 @@ def main():
     files.sort()
     print(f'Mode: {"APPLY" if args.apply else "DRY RUN"} | Scanning: {root} | Files: {len(files)}')
     changed = skipped = conflicts = errors = 0
-    # Reserve destinations across batch (including unchanged source names) to avoid clashes.
-    source_paths = set(files)
-    planned_destinations = set()
+    # Reserve every original name even if it is unchanged or processed later.
+    # This prevents a planned rename from taking another file's original path.
+    reserved = {str(src).casefold() for src in files}
+    duplicates = 0
     for src in files:
         updated = transformed(src.name, args)
         if updated is None or updated in {'.', '..'} or '/' in updated or '\\' in updated or '\x00' in updated:
@@ -136,16 +157,31 @@ def main():
             skipped += 1
             continue
         dst = src.with_name(updated)
-        if dst.exists() or dst in planned_destinations or (dst in source_paths):
-            conflicts += 1
-            print(f'CONFLICT: {src.name} -> {updated}')
-            logging.warning('CONFLICT %s -> %s', src, dst)
-            continue
-        planned_destinations.add(dst)
-        print(f'{"RENAME" if args.apply else "WOULD RENAME"}: {src} -> {updated}')
+        original_target = dst
+        if destination_taken(dst, reserved):
+            if args.on_conflict == 'skip':
+                conflicts += 1
+                print(f'CONFLICT SKIPPED: {src.name} -> {updated}')
+                logging.warning('CONFLICT_SKIPPED %s -> %s', src, dst)
+                continue
+            number = 2
+            while True:
+                alternative = src.with_name(duplicate_name(updated, number))
+                if not destination_taken(alternative, reserved):
+                    dst = alternative
+                    break
+                number += 1
+            duplicates += 1
+            print(f'DUPLICATE: {src.name} -> {dst.name} (requested: {original_target.name})')
+            logging.info('DUPLICATE_RESOLVED %s -> %s; original_target=%s', src, dst, original_target)
+        reserved.add(str(dst).casefold())
+        print(f'{"RENAME" if args.apply else "WOULD RENAME"}: {src} -> {dst.name}')
         logging.info('%s %s -> %s', 'RENAME' if args.apply else 'DRY_RUN', src, dst)
         if args.apply:
             try:
+                # Defensive second check before renaming; never intentionally overwrite.
+                if dst.exists():
+                    raise FileExistsError(f'Target appeared after planning: {dst}')
                 src.rename(dst)
             except OSError as exc:
                 errors += 1
@@ -153,7 +189,7 @@ def main():
                 print(f'ERROR: {exc}')
                 continue
         changed += 1
-    summary = f'Files scanned={len(files)}; {"renamed" if args.apply else "proposed"}={changed}; unchanged/skipped={skipped}; conflicts={conflicts}; errors={errors}'
+    summary = f'Files scanned={len(files)}; {"renamed" if args.apply else "proposed"}={changed}; unchanged/skipped={skipped}; duplicates_resolved={duplicates}; conflicts_skipped={conflicts}; errors={errors}'
     logging.info(summary)
     print(summary)
     print(f'Logfile: {log_path}')

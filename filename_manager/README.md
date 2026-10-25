@@ -1,4 +1,4 @@
-# Filename Manager v1.0
+# Filename Manager v1.1
 
 Offline, cross-platform Python command-line utility for recursively renaming filenames. It can **remove**, **replace**, **add a prefix**, or **add a suffix**. By default **no files are changed** (dry run).
 
@@ -94,6 +94,7 @@ On macOS / Linux, use `python3` if `python` is not mapped to Python 3. On Window
 | `--no-recursive` | Only process files in the selected folder |
 | `--include-hidden` | Include hidden files and folders |
 | `--log-dir PATH` | Save per-run logs to chosen directory (default `./logs`) |
+| `--on-conflict suffix\|skip` | Automatically assign `[dup2]`, `[dup3]` (default), or skip conflicting names |
 | `--help` | Show command help |
 
 ### Leading-symbol cleanup
@@ -106,7 +107,7 @@ Removing `filanem.st` from `filanem.st_978-3-032-24372-0.rar` yields `978-3-032-
 - Operates on **filenames**, not folders; scans child folders by default.
 - Preserves filename extensions, including common compound extensions like `.tar.gz`.
 - Skips hidden files/folders by default; skips symlinks.
-- Will not overwrite existing destination names; reports collisions/conflicts, using exit code 2.
+- Will not overwrite existing destination names; automatically assigns `[dup2]`, `[dup3]`, etc. by default, or skips conflicts with `--on-conflict skip`.
 - Skips invalid or empty resulting names.
 - A unique timestamped log is created every run in the `logs/` directory unless configured otherwise; logs are ignored by Git.
 - Renaming within the same filesystem ordinarily preserves file contents and metadata; directory timestamps may change. Back up important collections before applying bulk changes.
@@ -120,15 +121,31 @@ python -m unittest discover -s tests -v
 
 ## Git publishing
 
-Create an empty **private** repository on your chosen Git server or GitHub and then from this directory:
+To add this tool to your existing **files_processing** repository (rather than creating another Git repository):
 
 ```bash
-git init
-git add .
-git commit -m "Add cross-platform filename manager v1.0"
-git branch -M main
-git remote add origin <YOUR_REPOSITORY_URL>
-git push -u origin main
+cd files_processing
+# Copy this project into files_processing/filename_manager/
+git add filename_manager/
+git commit -m "feat(filename-manager): update to v1.1 with collision suffixes"
+git push origin main
 ```
 
 Make sure not to commit private book collections or log files. Verify `git status` and `git diff --cached --stat` before pushing.
+
+## Duplicate handling (v1.1)
+
+By default, a destination collision gets a **unique duplicate suffix** instead of being skipped or overwritten. For example, if `1.epub` exists:
+
+- `test.st_1.epub` after removing `test.st_` becomes `1 [dup2].epub`.
+- If `1 [dup2].epub` also exists, it becomes `1 [dup3].epub`.
+
+This also accounts for *other files in the same batch* and preserves all original source filenames until their rename is evaluated. Run a dry run first to see the selected names. To keep the old behavior (skip duplicates), use `--on-conflict skip`.
+
+```bash
+python filename_manager.py /path/to/books --action remove --find 'test.st_'  # Preview
+python filename_manager.py /path/to/books --action remove --find 'test.st_' --apply
+python filename_manager.py /path/to/books --action remove --find 'test.st_' --on-conflict skip --apply
+```
+
+This resolves **filename collisions**, not identical content. Two files may have identical bytes; use a separate hash-based duplicate checker if you want to identify or delete truly redundant copies.
