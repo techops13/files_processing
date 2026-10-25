@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+logs/
+pipeline_input/
+.DS_Store
+.pytest_cache/

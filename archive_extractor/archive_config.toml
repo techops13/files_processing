@@ -1,0 +1,29 @@
+# Archive Extractor v1.0: conservative, fail-closed defaults
+[general]
+stage_directory = "pipeline_input"
+recursive = true
+
+[books]
+# Priority is intentionally validated by code in v1.0.
+priority = ["pdf", "epub", "mobi", "azw3", "djvu"]
+selection = "one_per_archive"
+
+[filtering]
+skip_mixed_content = true
+skip_password_protected = true
+skip_nested_archives = true
+skip_unknown = true
+# Harmless companion images (.jpg/.png) and metadata (.opf/.txt) may coexist
+# with an eligible book, but never make an archive eligible on their own.
+
+[verification]
+timeout_seconds = 30
+max_members = 5000
+max_book_bytes = 1073741824
+
+[logging]
+console_colors = true
+text_log = true
+jsonl_log = true
+csv_inventory = true
+excel_inventory = true

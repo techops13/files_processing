@@ -1,0 +1,4 @@
+# Python >= 3.11 required (tomllib)
+# Optional Excel report; CSV/JSONL/text reports need no pip packages.
+openpyxl>=3.1,<4
+# For RAR/7z install 7zz system binary separately (see README).
