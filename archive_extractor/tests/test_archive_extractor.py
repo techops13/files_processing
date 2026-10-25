@@ -86,3 +86,28 @@ Copy Link =
                 f=tarfile.TarInfo('lnk');f.type=tarfile.SYMTYPE;f.linkname='/tmp/wrong';t.addfile(f)
             with self.assertRaises(a.ArchiveIssue):a.classify(a.list_tar(p),C)
 if __name__=='__main__':unittest.main()
+
+
+class InventoryTests(unittest.TestCase):
+    def test_inventory_extensions_and_counts(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            for name in ('one.pdf','two.epub','archive.rar','other.7z','music.mp3','pack.tar.gz'):
+                (root/name).write_bytes(b'a')
+            (root/'sub').mkdir()
+            (root/'sub'/'three.epub').write_bytes(b'x')
+            found=a.pre_run_inventory(root,root/'pipeline_input',root/'logs')
+            self.assertEqual(found['total_files'],7)
+            self.assertEqual(found['extensions']['.epub'],2)
+            self.assertEqual(found['extensions']['.tar.gz'],1)
+            self.assertEqual(found['categories']['archives'],3)
+            self.assertEqual(found['directories'],1)
+
+    def test_issue_summary_does_not_modify_full_detail(self):
+        detail='Disallowed members: '+', '.join(f'chapter{i:02}.mp3' for i in range(20))
+        shortened=a.format_issue(detail,5)
+        self.assertIn('and 15 more',shortened)
+        self.assertNotIn('chapter19.mp3',shortened)
+        self.assertIn('chapter19.mp3',detail)

@@ -1,6 +1,6 @@
 [project]
 name = "files-processing-archive-extractor"
-version = "1.0.1"
+version = "1.1.0"
 description = "Conservative, auditable staging of book-only archives"
 requires-python = ">=3.11"
 dependencies = []

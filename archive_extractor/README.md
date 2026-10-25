@@ -74,3 +74,45 @@ A future pipeline should consume `run_summary.json` and `inventory.csv` rather t
 ## v1.0.1 RAR5 listing fix
 
 Some versions of 7-Zip include blank `Symbolic Link`, `Hard Link`, and `Copy Link` fields for ordinary RAR5 book files. This release treats blank fields as absent, while rejecting actual links and unsafe member paths. The archive header is not interpreted as a member. Run `python -m unittest discover -s tests -v` and then a dry run before staging.
+
+
+## v1.1.0 — Phase 0 inventory and readable terminal output
+
+Every normal run first counts files already present on disk, grouped by complete
+extension (`.tar.gz` is counted separately from `.gz`). It displays directory
+count, total files, bytes, categories (archive, book, audio, video, other),
+per-extension counts, and scan duration **before** archive inspection. This does
+not inspect archive members and does not extract anything. Existing staged
+outputs, program logs, hidden entries, and symlinks are excluded.
+
+For a statistics-only operation:
+
+```bash
+python archive_extractor.py ~/Downloads/Rapidgator --inventory-only
+```
+
+To perform the usual safe dry run or explicit staging:
+
+```bash
+python archive_extractor.py ~/Downloads/Rapidgator
+python archive_extractor.py ~/Downloads/Rapidgator --stage
+```
+
+Each run records `pre_run_inventory.json` and `pre_run_inventory.csv` beside
+the existing run logs, inventory, errors and summary. The inventory is also
+embedded in the run summary for full processing runs.
+
+Warnings are separated visually and include a concise indented list of up to
+five disallowed members, plus a count of additional entries. The original
+warning text (including **all** disallowed members) is recorded in `.log`,
+`.jsonl`, and `inventory.csv`. Terminal color is enabled only when appropriate;
+`--no-color` forces plain output.
+
+The `[display]` section of `archive_config.toml` documents the intended
+formatting defaults, notably `max_offending_files = 5`. This release implements
+that limit and blank-line separators; remaining display keys are reserved for
+future refinements.
+
+**Safety:** Dry run is still the default, PDF > EPUB > MOBI > AZW3 > DJVU/DJV
+priority is unchanged, and any archive with disallowed media is skipped in
+full. This release does not add multipart extraction or change password handling.

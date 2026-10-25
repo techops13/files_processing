@@ -27,3 +27,11 @@ text_log = true
 jsonl_log = true
 csv_inventory = true
 excel_inventory = true
+
+[display]
+blank_line_between_archives = true
+max_offending_files = 5
+indent_details = true
+show_archive_progress = true
+show_skip_reason = true
+show_processing_duration = true

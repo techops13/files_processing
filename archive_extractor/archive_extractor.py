@@ -112,7 +112,7 @@ def classify(members,config):
         elif ext in ALLOWED_SIDE: nonbook.append(m.name)
         else: others.append(m.name)
     if others:
-        raise ArchiveIssue('SKIPPED_MIXED_CONTENT' if books else 'SKIPPED_NON_BOOK', 'Disallowed members: '+', '.join(others[:12]))
+        raise ArchiveIssue('SKIPPED_MIXED_CONTENT' if books else 'SKIPPED_NON_BOOK', 'Disallowed members: '+', '.join(others))
     if not books: raise ArchiveIssue('NO_ELIGIBLE_BOOK','Text/supporting files alone do not qualify')
     maxfiles=config['verification']['max_members']
     if len(members)>maxfiles: raise ArchiveIssue('LIMIT_EXCEEDED',f'{len(members)} members > {maxfiles}')
@@ -196,13 +196,65 @@ def check_signature_as(path,ext):
             f.seek(60);return f.read(8) in (b'BOOKMOBI',b'TEXtREAd')
     return False
 
-def log_line(logfile,jsonfile,level,msg,context,color):
+def extension_of(path):
+    """Use compound archive suffixes as a single extension for inventory."""
+    name=path.name.lower()
+    for suffix in sorted(ARCHIVE_SUFFIXES,key=len,reverse=True):
+        if name.endswith(suffix): return suffix
+    if MULTIPART_RE.search(name):
+        return '.multipart'
+    return path.suffix.lower() or '[no extension]'
+
+
+def pre_run_inventory(directory, out, logs_dir):
+    """Read-only count of directory entries, excluding staging and project logs."""
+    exts=Counter(); groups=Counter(); bytes_total=0; dirs_total=0; files_total=0
+    for root, dirs, files in os.walk(directory):
+        dirs[:]=[d for d in dirs if not d.startswith('.') and not (Path(root)/d).is_symlink()
+                 and (Path(root)/d).resolve() not in (out,logs_dir)]
+        dirs_total+=len(dirs)
+        for name in files:
+            if name.startswith('.'): continue
+            p=Path(root)/name
+            if p.is_symlink() or not p.is_file():continue
+            try: size=p.stat().st_size
+            except OSError:continue
+            files_total+=1;bytes_total+=size
+            ext=extension_of(p);exts[ext]+=1
+            if archive_type(p):group='archives'
+            elif p.suffix.lower() in BOOK:group='books'
+            elif p.suffix.lower() in AUDIO:group='audio'
+            elif p.suffix.lower() in VIDEO:group='video'
+            else:group='other'
+            groups[group]+=1
+    return {'directories':dirs_total,'total_files':files_total,'total_bytes':bytes_total,
+            'categories':dict(groups),'extensions':dict(sorted(exts.items()))}
+
+
+def write_pre_inventory(data,logs):
+    (logs/'pre_run_inventory.json').write_text(json.dumps(data,indent=2)+'\n',encoding='utf8')
+    with (logs/'pre_run_inventory.csv').open('w',newline='',encoding='utf-8-sig') as f:
+        writer=csv.writer(f);writer.writerow(['extension','file_count'])
+        writer.writerows(sorted(data['extensions'].items()))
+
+
+def format_issue(detail, max_files=5):
+    """Summarize huge disallowed-member lists without truncating the persisted log."""
+    prefix='Disallowed members: '
+    if not detail.startswith(prefix):return detail
+    names=detail[len(prefix):].split(', ')
+    shown=names[:max_files]
+    suffix=f'\n    ... and {len(names)-len(shown)} more (full list in logs)' if len(names)>len(shown) else ''
+    return f'{len(names)} disallowed member(s):\n'+''.join(f'    - {name}\n' for name in shown).rstrip('\n')+suffix
+
+
+def log_line(logfile,jsonfile,level,msg,context,color,console_message=None):
     ts=datetime.now().astimezone().isoformat(timespec='seconds')
     record={'timestamp':ts,'level':level,'message':msg,**context}
     with logfile.open('a',encoding='utf8') as f:f.write(f'{ts} [{level}] {msg}\n')
     with jsonfile.open('a',encoding='utf8') as f:f.write(json.dumps(record,ensure_ascii=False)+'\n')
     prefix=DISPLAY.get(level,'') if color else ''
-    print(f'{prefix}[{level}] {msg}{"\033[0m" if prefix else ""}')
+    print(f'{prefix}[{level}] {console_message if console_message is not None else msg}{chr(27)+"[0m" if prefix else ""}')
 
 def run(argv=None):
     ap=argparse.ArgumentParser(description=__doc__)
@@ -211,6 +263,7 @@ def run(argv=None):
     ap.add_argument('--stage',action='store_true',help='Actually stage eligible books (default is dry run)')
     ap.add_argument('--no-color',action='store_true')
     ap.add_argument('--verbose',action='store_true')
+    ap.add_argument('--inventory-only',action='store_true',help='Count files without archive inspection or staging')
     args=ap.parse_args(argv)
     start=datetime.now().astimezone();tick=time.monotonic()
     runid=start.strftime('%Y-%b-%d_%H-%M-%S')
@@ -226,12 +279,31 @@ def run(argv=None):
     try:logs.mkdir(parents=True,exist_ok=False)
     except FileExistsError:logs=ROOT/'logs'/(runid+f'-{os.getpid()}');logs.mkdir(parents=True)
     logfile=logs/'archive_extractor.log';jsonfile=logs/'archive_extractor.jsonl'
-    emit=lambda level,msg,**ctx:log_line(logfile,jsonfile,level,msg,ctx,not args.no_color and sys.stdout.isatty())
+    emit=lambda level,msg,console_message=None,**ctx:log_line(logfile,jsonfile,level,msg,ctx,not args.no_color and sys.stdout.isatty(),console_message)
     timeout=config['verification']['timeout_seconds']
     out=(directory/config['general']['stage_directory']).resolve()
     if not out.is_relative_to(directory) or out==directory:
         emit('SHOWSTOPPER','Unsafe stage_directory configuration');return 2
-    emit('INFO',f'Run {runid} started {start.isoformat()}, mode={"STAGE" if args.stage else "DRY-RUN"}')
+    mode='INVENTORY_ONLY' if args.inventory_only else ('STAGE' if args.stage else 'DRY_RUN')
+    emit('INFO',f'Run {runid} started {start.isoformat()}, mode={mode}')
+    print('\n'+'='*64+'\nPHASE 0 — PRE-RUN FILE INVENTORY\n'+'='*64)
+    inv_start=time.monotonic()
+    inventory=pre_run_inventory(directory,out,ROOT/'logs')
+    inventory['scan_duration_seconds']=round(time.monotonic()-inv_start,3)
+    write_pre_inventory(inventory,logs)
+    print(f"Directory   : {directory}\nDirectories : {inventory['directories']}\nFiles       : {inventory['total_files']}\nTotal bytes : {inventory['total_bytes']:,}\nScan time   : {inventory['scan_duration_seconds']:.3f}s")
+    print('Categories  : '+', '.join(f'{k}={v}' for k,v in sorted(inventory['categories'].items())))
+    print('\nFILE TYPES (on disk, not contents inside archives)')
+    for ext,n in inventory['extensions'].items():print(f'  {ext:<17} {n:>8,}')
+    print('='*64+'\n')
+    emit('INFO','Pre-run inventory complete', inventory=inventory)
+    if args.inventory_only:
+        end=datetime.now().astimezone();elapsed=round(time.monotonic()-tick,3)
+        summary={'run_id':runid,'mode':mode,'start':start.isoformat(),'end':end.isoformat(),
+                 'elapsed_seconds':elapsed,'inventory':inventory,'logs':str(logs)}
+        (logs/'run_summary.json').write_text(json.dumps(summary,indent=2)+'\n',encoding='utf8')
+        emit('INFO',f'Inventory-only complete | elapsed {elapsed:.3f}s | Reports: {logs}')
+        return 0
     rows=[];counts=Counter()
     paths=[]
     for root,dirs,files in os.walk(directory):
@@ -251,11 +323,14 @@ def run(argv=None):
                 result,digest=stage(p,selected,out,timeout)
                 row['output']=result;row['sha256']=digest;status='STAGED'
             else:status='ELIGIBLE_DRY_RUN'
+            print()
             emit('SUCCESS',f'{idx}/{len(paths)} {p.name}: {status}: {selected.name}')
         except ArchiveIssue as e:
-            status=e.status;row['reason']=e.detail;emit('WARNING',f'{idx}/{len(paths)} {p.name}: {status}: {e.detail}')
+            status=e.status;row['reason']=e.detail
+            print()
+            emit('WARNING',f'{idx}/{len(paths)} {p.name}: {status}: {e.detail}', console_message=f'{idx}/{len(paths)} {p.name}\n  Status: {status}\n  Reason: {format_issue(e.detail, config.get("display",{}).get("max_offending_files",5))}\n  Action: Skipped; original unchanged')
         except (OSError,zipfile.BadZipFile,tarfile.TarError,RuntimeError,subprocess.SubprocessError) as e:
-            status='ERROR';row['reason']=str(e);emit('ERROR',f'{idx}/{len(paths)} {p.name}: {str(e)}')
+            status='ERROR';row['reason']=str(e);print();emit('ERROR',f'{idx}/{len(paths)} {p.name}: {str(e)}')
         row['status']=status;row['duration_s']=round(time.monotonic()-t0,3);counts[status]+=1;rows.append(row)
     fields=['archive','status','reason','selected_member','output','sha256','duration_s','member_count']
     with (logs/'inventory.csv').open('w',newline='',encoding='utf-8-sig') as f:
@@ -269,7 +344,7 @@ def run(argv=None):
         wb.save(logs/'inventory.xlsx')
     except ImportError:emit('WARNING','Excel output unavailable; install openpyxl (CSV always generated)')
     end=datetime.now().astimezone();elapsed=round(time.monotonic()-tick,3)
-    summary={'run_id':runid,'mode':'STAGE' if args.stage else 'DRY_RUN','start':start.isoformat(),'end':end.isoformat(),'elapsed_seconds':elapsed,'archive_count':len(paths),'counts':dict(counts),'logs':str(logs),'config':str(args.config)}
+    summary={'run_id':runid,'mode':'STAGE' if args.stage else 'DRY_RUN','start':start.isoformat(),'end':end.isoformat(),'elapsed_seconds':elapsed,'archive_count':len(paths),'pre_run_inventory':inventory,'counts':dict(counts),'logs':str(logs),'config':str(args.config)}
     (logs/'run_summary.json').write_text(json.dumps(summary,indent=2)+'\n',encoding='utf8')
     emit('INFO',f'Finished {end.isoformat()} | elapsed {elapsed:.3f}s | archives {len(paths)} | results {dict(counts)}')
     emit('INFO',f'Reports: {logs}')

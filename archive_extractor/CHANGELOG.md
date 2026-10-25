@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0] - 2026-10-25
+- Added Phase 0 recursive pre-run extension inventory with on-disk file counts, categories, sizes, directory count, and timing.
+- Added `--inventory-only` CLI mode and CSV/JSON pre-run inventory artifacts.
+- Added readable spacing between archive reports and summarized offending-member lists in terminal output.
+- Preserved complete lists of offending members in structured and text logs (removed previous 12-member truncation).
+- Added configuration `[display]`, inventory regression tests, and updated documentation.
+- Retained v1.0.1 RAR5 parser safeguards, fail-closed rules, dry-run default, and staging behavior.
+
+# Changelog
+
 ## [1.0.1] - 2026-10-25
 
 ### Fixed
