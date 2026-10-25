@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0 — 2026-10-24
+
+- Trim trailing as well as leading punctuation and symbols from filename stems after remove operations.
+- Preserve extensions and internal punctuation, including ISBN hyphens.
+- Keep `--keep-leading-symbols` as a compatibility flag that suppresses edge cleanup.
+- Add regression tests for extra periods before extensions and empty names.
+
+
 ## v1.1.0 — 2026-10-24
 
 - Add automatic collision naming using `[dup2]`, `[dup3]`, etc. without overwriting existing files.

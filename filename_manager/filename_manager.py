@@ -21,7 +21,7 @@ def parse_args():
     p.add_argument('--apply', action='store_true', help='Actually rename files (otherwise dry run)')
     p.add_argument('--on-conflict', choices=['suffix', 'skip'], default='suffix',
                    help='If target exists, add [dup2], [dup3], etc. or skip')
-    p.add_argument('--keep-leading-symbols', action='store_true', help='Disable automatic removal of leading symbols after a remove operation')
+    p.add_argument('--keep-leading-symbols', action='store_true', help='Preserve edge symbols (both leading and trailing) after remove; legacy flag name')
     p.add_argument('--no-recursive', action='store_true', help='Only scan selected directory')
     p.add_argument('--include-hidden', action='store_true', help='Include hidden files and directories')
     p.add_argument('--log-dir', help='Where to store the logfile (default: current working directory/logs)')
@@ -58,12 +58,16 @@ def replace_text(name, old, new, insensitive):
     return re.sub(re.escape(old), lambda match: new, name, flags=re.IGNORECASE)
 
 
-def trim_leading_symbols(value):
-    """Discard leading punctuation, symbols, whitespace and control characters.
+def trim_edge_symbols(value):
+    """Trim both ends of a filename stem to its outermost Unicode letter or number.
 
-    Unicode letters and numbers remain intact.
+    Preserve punctuation inside the stem, including ISBN hyphens.
     """
-    return value[next((i for i, ch in enumerate(value) if ch.isalnum()), len(value)):]
+    first = next((i for i, ch in enumerate(value) if ch.isalnum()), len(value))
+    if first == len(value):
+        return ""
+    last = next(i for i in range(len(value) - 1, first - 1, -1) if value[i].isalnum())
+    return value[first:last + 1]
 
 
 def transformed(name, args):
@@ -77,7 +81,7 @@ def transformed(name, args):
     if args.action == 'remove':
         stem = replace_text(stem, args.find, '', args.case == 'insensitive')
         if not args.keep_leading_symbols:
-            stem = trim_leading_symbols(stem)
+            stem = trim_edge_symbols(stem)
     elif args.action == 'replace':
         stem = replace_text(stem, args.find, args.with_text, args.case == 'insensitive')
     elif args.action == 'prefix':
@@ -126,7 +130,7 @@ def main():
     stamp = dt.datetime.now().strftime('%Y-%b-%d_%H%M%S_%f')
     log_path = log_dir / f'filename_manager_{stamp}.log'
     logging.basicConfig(filename=log_path, level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', encoding='utf-8')
-    logging.info('Directory=%s action=%s apply=%s case=%s recursive=%s trim_leading=%s', root, args.action, args.apply, args.case, not args.no_recursive, not args.keep_leading_symbols)
+    logging.info('Directory=%s action=%s apply=%s case=%s recursive=%s trim_edge_symbols=%s', root, args.action, args.apply, args.case, not args.no_recursive, not args.keep_leading_symbols)
     files = []
     for current, dirs, names in os.walk(root, followlinks=False):
         if not args.include_hidden:

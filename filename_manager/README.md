@@ -1,4 +1,4 @@
-# Filename Manager v1.1
+# Filename Manager v1.2
 
 Offline, cross-platform Python command-line utility for recursively renaming filenames. It can **remove**, **replace**, **add a prefix**, or **add a suffix**. By default **no files are changed** (dry run).
 
@@ -15,7 +15,7 @@ Offline, cross-platform Python command-line utility for recursively renaming fil
 
 ```bash
 git clone <YOUR_REPOSITORY_URL>
-cd filename-manager
+cd files_processing/filename_manager
 ```
 
 If you don't have Git, simply download and extract the repository ZIP.
@@ -149,3 +149,11 @@ python filename_manager.py /path/to/books --action remove --find 'test.st_' --on
 ```
 
 This resolves **filename collisions**, not identical content. Two files may have identical bytes; use a separate hash-based duplicate checker if you want to identify or delete truly redundant copies.
+
+## Edge cleanup (v1.2)
+
+After a **remove** operation, filename stems are trimmed on **both ends** until they begin and end with a Unicode letter or digit. The file extension is preserved and internal punctuation (including ISBN hyphens) remains unchanged.
+
+Example: `979-8-8688-2083-0.filename.tt.pdf` with `--find filename.tt` becomes `979-8-8688-2083-0.pdf`, not `979-8-8688-2083-0..pdf`.
+
+The existing `--keep-leading-symbols` flag disables **both** leading and trailing symbol cleanup in this release for backward compatibility. Replacement, prefix, and suffix operations do not apply this cleanup. Dry run remains the default.

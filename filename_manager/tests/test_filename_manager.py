@@ -14,6 +14,17 @@ class FilenameManagerTests(unittest.TestCase):
         self.assertEqual(transformed('filanem.st_978-3-032-24372-0.rar', args('remove', 'filanem.st')),
                          '978-3-032-24372-0.rar')
 
+    def test_trailing_dots_after_remove(self):
+        self.assertEqual(transformed('979-8-8688-2083-0.filename.tt.pdf', args('remove', 'filename.tt')),
+                         '979-8-8688-2083-0.pdf')
+
+    def test_edges_preserve_internal_hyphens(self):
+        self.assertEqual(transformed('_.A-B+_.pdf', args('remove', 'not-found')),
+                         'A-B.pdf')
+
+    def test_all_symbols_empty_stem(self):
+        self.assertIsNone(transformed('...__.pdf', args('remove', 'not-found')))
+
     def test_keep_symbols(self):
         self.assertEqual(transformed('filanem.st_ABC.pdf', args('remove', 'filanem.st', keep_leading_symbols=True)),
                          '_ABC.pdf')
