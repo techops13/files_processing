@@ -1,3 +1,10 @@
+## [2.2.1] - 2026-10-27
+- Recover unclosed publication year at filename end, such as `(2020.pdf`, without guessing author or casing.
+- Add `sanitize` action for plus separators and dense hyphen-separated filename slugs.
+- Mark ambiguous dense-hyphen transformations `SANITIZATION_REVIEW`; do not apply without manual refinement.
+- Preserve ISBNs, manually bracketed metadata, and publisher-author separators.
+- Update configuration, tests, and usage documentation.
+
 # Changelog
 
 ## v2.1.0 — 2026-10-24

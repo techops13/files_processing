@@ -14,3 +14,10 @@ special_terms = ["Python", "ChatGPT", "PyTorch", "TensorFlow", "NumPy", "macOS",
 
 [duplicates]
 show_limit = 10
+
+[sanitization]
+enabled = true
+replace_plus = true
+replace_dense_hyphens = true
+dense_hyphen_min_tokens = 4
+# Dense hyphens are proposals requiring review and never auto-applied.

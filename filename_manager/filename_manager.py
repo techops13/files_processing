@@ -8,14 +8,14 @@ import datetime as dt
 import logging
 import os
 import re
-from filename_normalize import load_config, normalize, duplicate_groups
+from filename_normalize import load_config, normalize, duplicate_groups, sanitize
 from pathlib import Path
 
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument('directory', nargs='?', help='Directory to scan')
-    p.add_argument('--action', choices=['remove', 'replace', 'prefix', 'suffix', 'normalize', 'duplicates'])
+    p.add_argument('--action', choices=['remove', 'replace', 'prefix', 'suffix', 'normalize', 'duplicates', 'sanitize'])
     p.add_argument('--config', help='Filename normalization TOML (defaults beside script)')
     p.add_argument('--report-duplicates', action='store_true', help='Report potential filename duplicates after processing')
     p.add_argument('--find', help='Text to remove or replace')
@@ -42,8 +42,8 @@ def interactive(args):
     if not args.directory:
         args.directory = input('Directory to scan: ').strip().strip('"')
     if not args.action:
-        print('1) Remove  2) Replace  3) Prefix  4) Suffix  5) Normalize  6) Duplicates')
-        args.action = {'1': 'remove', '2': 'replace', '3': 'prefix', '4': 'suffix', '5': 'normalize', '6': 'duplicates'}[ask_choice('Choose [1-6]: ', {'1','2','3','4','5','6'})]
+        print('1) Remove  2) Replace  3) Prefix  4) Suffix  5) Normalize  6) Duplicates  7) Sanitize')
+        args.action = {'1': 'remove', '2': 'replace', '3': 'prefix', '4': 'suffix', '5': 'normalize', '6': 'duplicates', '7': 'sanitize'}[ask_choice('Choose [1-7]: ', {'1','2','3','4','5','6','7'})]
     if args.action in ('remove', 'replace') and args.find is None:
         args.find = input('Text to find: ')
     if args.action in ('replace', 'prefix', 'suffix') and args.with_text is None:
@@ -97,6 +97,8 @@ def trim_edge_symbols(value):
 def transformed(name, args, cfg=None):
     if args.action == 'normalize':
         return normalize(name, cfg)[0]
+    if args.action == 'sanitize':
+        return sanitize(name, cfg)[0]
     if args.action == 'duplicates':
         return name
     # Work on the filename stem, never alter extension(s) from operations.
@@ -145,7 +147,7 @@ def main():
     if args.case is None:
         args.case = 'sensitive'
     cfg_path = Path(args.config).expanduser() if args.config else Path(__file__).with_name('filename_config.toml')
-    cfg = load_config(cfg_path) if args.action == 'normalize' else None
+    cfg = load_config(cfg_path) if args.action in ('normalize', 'sanitize') else None
     if args.action in ('remove','replace') and not args.find:
         raise SystemExit('ERROR: --find must not be empty.')
     if args.action in ('replace','prefix','suffix') and args.with_text is None:
@@ -191,13 +193,13 @@ def main():
     duplicates = 0
     for src in files:
         updated = transformed(src.name, args, cfg)
-        if args.action == 'normalize':
-            updated, review = normalize(src.name, cfg)
+        if args.action in ('normalize', 'sanitize'):
+            updated, review = (normalize(src.name, cfg) if args.action == 'normalize' else sanitize(src.name, cfg))
             if review:
                 logging.warning('REVIEW_REQUIRED %s reasons=%s proposed=%s', src, review, updated)
                 print(f'\nREVIEW REQUIRED: {src.name} | {", ".join(review)}\n  Proposed: {updated}')
                 # A review flag is informational during dry run; never auto-apply.
-                if args.apply and any(code in {'CASING_REVIEW', 'SEPARATOR_REVIEW', 'MULTIPLE_NOTES_REVIEW', 'EMPTY_TITLE'} for code in review):
+                if args.apply and any(code in {'CASING_REVIEW', 'SEPARATOR_REVIEW', 'SANITIZATION_REVIEW', 'MULTIPLE_NOTES_REVIEW', 'EMPTY_TITLE'} for code in review):
                     skipped += 1
                     continue
         if updated is None or updated in {'.', '..'} or '/' in updated or '\\' in updated or '\x00' in updated:

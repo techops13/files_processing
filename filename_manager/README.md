@@ -202,3 +202,28 @@ Rules are in `filename_config.toml` (Python 3.11+ needed for `tomllib`). The pro
 **Casing safeguard:** Uniformly upper- or lowercase filenames are flagged `CASING_REVIEW`. The script does not silently apply guessed title casing, particularly for author names and brand names. Plus-separated filenames are flagged `SEPARATOR_REVIEW`. Files flagged `CASING_REVIEW`, `SEPARATOR_REVIEW`, `MULTIPLE_NOTES_REVIEW`, or `EMPTY_TITLE` are **never renamed by `--apply`**; `AUTHOR_UNKNOWN` alone does not block adding empty brackets to preserve manual notes. Dry-run displays a proposal but does not modify files. Full casing automation needs user-approved dictionaries and further tests.
 
 Duplicate reports are filename-based only, so they are *possible* duplicates, not proof of equal contents. Report mode never deletes files. Name normalization does not read book metadata or invoke remote AI.
+
+## v2.2.1: sanitization and malformed year recovery
+
+Python 3.11+ required. A virtual environment is recommended.
+
+```bash
+python filename_manager.py ~/Downloads/testing_books --action sanitize
+python filename_manager.py ~/Downloads/testing_books --action normalize
+python filename_manager.py ~/Downloads/testing_books --action sanitize --apply
+```
+
+All operations default to **dry run**. The `sanitize` action converts plus signs to spaces,
+and proposes converting dense hyphen-separated slugs (four or more word segments) to spaces.
+Dense hyphen conversions are marked `SANITIZATION_REVIEW` and **not applied** under `--apply`
+because they could involve valid hyphenated names. Inspect dry-run logs and rename these
+manually until a confirmed rule is added. Bracketed metadata and already structured
+publisher/author/title patterns are protected. ISBN-like number patterns are preserved.
+
+`normalize` now recognizes a dangling four-digit year at the end of the stem, e.g.
+`tantra dev - mahavidyas (2020.pdf` → `tantra dev - mahavidyas [2020][][].pdf`.
+`AUTHOR_UNKNOWN` and `CASING_REVIEW` still require review; normalization must not
+invent authors or automatically guess capitalization.
+
+**Operational caveat:** This tool's rename planning is conservative but not transactional;
+use copies in a test directory and review logs before large-scale `--apply` runs.

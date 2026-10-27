@@ -81,6 +81,14 @@ def normalize(name, cfg):
             return ' '
         return match.group()
     body = PAREN.sub(convert, body)
+    # Salvage a clear, unclosed year immediately before the extension only.
+    # Example: "Title (2020.pdf" -> "Title [2020][][].pdf".
+    recovered_dangling_year = False
+    dangling = re.search(r'(?<!\d)[\[(]\s*((?:18|19|20)\d{2})\s*$', body)
+    if dangling and year is None:
+        year = dangling.group(1)
+        recovered_dangling_year = True
+        body = body[:dangling.start()]
     body = tidy(body)
     # Detect author expressed as trailing 'by NAME', or 'Author -- Title'.
     publisher = author = None
@@ -118,7 +126,8 @@ def normalize(name, cfg):
         return name, sorted(set(review))
     if not body: return name, ['EMPTY_TITLE']
     # If only notes supplied, fill year and edition slots without changing the notes.
-    result = f'{body}[{year or ""}][{edition or ""}][{notes[0] if notes else ""}]{ext}'
+    sep = ' ' if recovered_dangling_year else ''
+    result = f'{body}{sep}[{year or ""}][{edition or ""}][{notes[0] if notes else ""}]{ext}'
     return result, sorted(set(review))
 
 
@@ -129,3 +138,29 @@ def duplicate_groups(paths):
         key = re.sub(r'\s*\[dup\d+\](?=\.[^.]+$)', '', p.name, flags=re.I).casefold()
         groups[key].append(p)
     return {key: entries for key, entries in groups.items() if len(entries) > 1}
+
+
+def sanitize(name, cfg):
+    """Conservative stem-only cleanup; (proposal, review flags)."""
+    stem, ext = split_name(name)
+    options = cfg.get('sanitization', {})
+    if not options.get('enabled', True):
+        return name, []
+    # Never reinterpret manually formatted publisher/author/title or bracket groups.
+    if re.search(r'\[[^\[\]]*\]', stem) or ' -- ' in stem:
+        return name, []
+    review = []
+    out = stem.replace('+', ' ') if options.get('replace_plus', True) else stem
+    # Explicitly avoid ISBNs, probable hyphenated words, and ambiguous proper names.
+    if options.get('replace_dense_hyphens', True) and '-' in out:
+        tokens = out.split('-')
+        if (len(tokens) >= options.get('dense_hyphen_min_tokens', 4)
+                and all(re.fullmatch(r'[A-Za-z]+', word) for word in tokens)
+                and not re.fullmatch(r'(?i)(?:97[89]-)?[0-9Xx-]+', out)):
+            # Strong signal of machine-generated slug; propose only, review first.
+            out = ' '.join(tokens)
+            review.append('SANITIZATION_REVIEW')
+    out = re.sub(r'\s+', ' ', out).strip(' _.- \t')
+    if not out:
+        return name, ['EMPTY_TITLE']
+    return out + ext, review
