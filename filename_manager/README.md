@@ -178,3 +178,27 @@ Book [2026]_.pdf                     -> Book [2026].pdf
 ```
 
 Use the default dry run before `--apply`, especially on large archives.
+
+## v2.2.0: optional filename-only normalization and duplicate review
+
+These are distinct operations; **Remove / Replace / Prefix / Suffix still behave as before**.
+
+```bash
+# Dry-run normalization (default); no file contents are read
+python filename_manager.py ~/Downloads/books --action normalize
+
+# Apply only unambiguous proposed changes (review flags are skipped)
+python filename_manager.py ~/Downloads/books --action normalize --apply
+
+# Read-only potential duplicate groups by case-insensitive name/[dupN] suffix
+python filename_manager.py ~/Downloads/books --action duplicates
+
+# Ask for a duplicate report after an operation
+python filename_manager.py ~/Downloads/books --action normalize --report-duplicates
+```
+
+Rules are in `filename_config.toml` (Python 3.11+ needed for `tomllib`). The program leaves correctly structured `Publisher -- Author - Title [Year][Edition][Notes].ext` filenames unchanged, preserving all metadata and punctuation. Normalizing other names can recognize certain years, editions and authors **only from filenames**; missing fields are kept empty and missing publisher becomes `Unknown` only when an author can be reliably parsed. Notes such as `[Must Read]`, `[Super Book]` and `[Manga Guide]` are protected from removal. The normalization output convention uses adjacent trailing groups (`[Year][Edition][Notes]`), including empty `[]` groups.
+
+**Casing safeguard:** Uniformly upper- or lowercase filenames are flagged `CASING_REVIEW`. The script does not silently apply guessed title casing, particularly for author names and brand names. Plus-separated filenames are flagged `SEPARATOR_REVIEW`. Files flagged `CASING_REVIEW`, `SEPARATOR_REVIEW`, `MULTIPLE_NOTES_REVIEW`, or `EMPTY_TITLE` are **never renamed by `--apply`**; `AUTHOR_UNKNOWN` alone does not block adding empty brackets to preserve manual notes. Dry-run displays a proposal but does not modify files. Full casing automation needs user-approved dictionaries and further tests.
+
+Duplicate reports are filename-based only, so they are *possible* duplicates, not proof of equal contents. Report mode never deletes files. Name normalization does not read book metadata or invoke remote AI.

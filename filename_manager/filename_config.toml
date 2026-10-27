@@ -1,0 +1,16 @@
+[normalization]
+convert_year_parentheses = true
+preserve_manual_brackets = true
+missing_publisher = "Unknown"
+review_missing_author = true
+convert_plus_separators = true
+
+[casing]
+enabled = true
+review_unknown_proper_names = true
+preserve_curated = true
+acronyms = ["AI", "ML", "LLM", "NLP", "API", "SQL", "GPU", "CPU", "HTML", "JSON", "AWS"]
+special_terms = ["Python", "ChatGPT", "PyTorch", "TensorFlow", "NumPy", "macOS", "iPhone", "GitHub", "Streamlit", "JavaScript", "scikit-learn"]
+
+[duplicates]
+show_limit = 10

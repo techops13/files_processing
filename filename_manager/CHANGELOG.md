@@ -36,3 +36,11 @@
 
 - Interactive and noninteractive filename removal, replacement, prefix, and suffix operations.
 - Recursive scanning, dry-run default, leading-symbol cleanup after removal, logging, and basic rename safeguards.
+
+## [2.2.0] - 2026-10-26
+- Added separate filename-only `normalize` action, configured by `filename_config.toml`.
+- Recognizes clear year, edition, trailing `by Author`, and `Author -- Title` patterns without reading book contents.
+- Preserves already fully structured filenames and manual notes; fills empty metadata bracket slots.
+- Adds conservative casing review for uniformly upper/lowercase filenames, retaining questionable names during `--apply`.
+- Adds filename-based potential duplicate reporting (`--action duplicates`, `--report-duplicates`). No deletion or content hashing.
+- Existing remove/replace/prefix/suffix functionality remains available; normalization is opt-in.

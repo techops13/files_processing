@@ -1,2 +1,2 @@
-# No third-party Python dependencies.
-# Python 3.9+ standard library only.
+# Python 3.11+ required for built-in tomllib
+# No third-party Python packages required.

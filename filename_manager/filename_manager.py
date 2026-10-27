@@ -8,13 +8,16 @@ import datetime as dt
 import logging
 import os
 import re
+from filename_normalize import load_config, normalize, duplicate_groups
 from pathlib import Path
 
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument('directory', nargs='?', help='Directory to scan')
-    p.add_argument('--action', choices=['remove', 'replace', 'prefix', 'suffix'])
+    p.add_argument('--action', choices=['remove', 'replace', 'prefix', 'suffix', 'normalize', 'duplicates'])
+    p.add_argument('--config', help='Filename normalization TOML (defaults beside script)')
+    p.add_argument('--report-duplicates', action='store_true', help='Report potential filename duplicates after processing')
     p.add_argument('--find', help='Text to remove or replace')
     p.add_argument('--with-text', default=None, help='Replacement text, or text to prepend/append')
     p.add_argument('--case', choices=['sensitive', 'insensitive'], default=None)
@@ -39,8 +42,8 @@ def interactive(args):
     if not args.directory:
         args.directory = input('Directory to scan: ').strip().strip('"')
     if not args.action:
-        print('1) Remove string  2) Replace string  3) Add prefix  4) Add suffix')
-        args.action = {'1': 'remove', '2': 'replace', '3': 'prefix', '4': 'suffix'}[ask_choice('Choose [1-4]: ', {'1','2','3','4'})]
+        print('1) Remove  2) Replace  3) Prefix  4) Suffix  5) Normalize  6) Duplicates')
+        args.action = {'1': 'remove', '2': 'replace', '3': 'prefix', '4': 'suffix', '5': 'normalize', '6': 'duplicates'}[ask_choice('Choose [1-6]: ', {'1','2','3','4','5','6'})]
     if args.action in ('remove', 'replace') and args.find is None:
         args.find = input('Text to find: ')
     if args.action in ('replace', 'prefix', 'suffix') and args.with_text is None:
@@ -91,7 +94,11 @@ def trim_edge_symbols(value):
     return core + ''.join(' ' + group for group in ending_groups + leading_groups)
 
 
-def transformed(name, args):
+def transformed(name, args, cfg=None):
+    if args.action == 'normalize':
+        return normalize(name, cfg)[0]
+    if args.action == 'duplicates':
+        return name
     # Work on the filename stem, never alter extension(s) from operations.
     # pathlib treats .tar.gz as .gz, so explicitly protect well-known compound extensions.
     compound = ('.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst')
@@ -137,6 +144,8 @@ def main():
         args = interactive(args)
     if args.case is None:
         args.case = 'sensitive'
+    cfg_path = Path(args.config).expanduser() if args.config else Path(__file__).with_name('filename_config.toml')
+    cfg = load_config(cfg_path) if args.action == 'normalize' else None
     if args.action in ('remove','replace') and not args.find:
         raise SystemExit('ERROR: --find must not be empty.')
     if args.action in ('replace','prefix','suffix') and args.with_text is None:
@@ -167,13 +176,30 @@ def main():
             files.append(source)
     files.sort()
     print(f'Mode: {"APPLY" if args.apply else "DRY RUN"} | Scanning: {root} | Files: {len(files)}')
+    if args.action == 'duplicates':
+        groups = duplicate_groups(files)
+        print(f'Potential duplicate groups: {len(groups)}')
+        for key, entries in sorted(groups.items()):
+            print(f'\n  GROUP: {key} ({len(entries)} files)')
+            for entry in entries: print(f'    {entry}')
+        logging.info('Duplicate groups=%s details=%s', len(groups), {k: [str(p) for p in v] for k,v in groups.items()})
+        return
     changed = skipped = conflicts = errors = 0
     # Reserve every original name even if it is unchanged or processed later.
     # This prevents a planned rename from taking another file's original path.
     reserved = {str(src).casefold() for src in files}
     duplicates = 0
     for src in files:
-        updated = transformed(src.name, args)
+        updated = transformed(src.name, args, cfg)
+        if args.action == 'normalize':
+            updated, review = normalize(src.name, cfg)
+            if review:
+                logging.warning('REVIEW_REQUIRED %s reasons=%s proposed=%s', src, review, updated)
+                print(f'\nREVIEW REQUIRED: {src.name} | {", ".join(review)}\n  Proposed: {updated}')
+                # A review flag is informational during dry run; never auto-apply.
+                if args.apply and any(code in {'CASING_REVIEW', 'SEPARATOR_REVIEW', 'MULTIPLE_NOTES_REVIEW', 'EMPTY_TITLE'} for code in review):
+                    skipped += 1
+                    continue
         if updated is None or updated in {'.', '..'} or '/' in updated or '\\' in updated or '\x00' in updated:
             skipped += 1
             logging.warning('INVALID_TARGET %s', src)
@@ -218,6 +244,15 @@ def main():
     logging.info(summary)
     print(summary)
     print(f'Logfile: {log_path}')
+    if args.report_duplicates:
+        effective = [p for p in root.rglob('*') if p.is_file() and not p.is_symlink()] if args.apply else files
+        groups = duplicate_groups(effective)
+        print(f'\nPOTENTIAL DUPLICATE GROUPS: {len(groups)}')
+        for key, entries in sorted(groups.items()):
+            print(f'\n  {key} ({len(entries)})')
+            for entry in entries[:10]: print(f'    {entry}')
+            if len(entries) > 10: print(f'    ... and {len(entries)-10} more')
+        logging.info('DUPLICATE_GROUPS %s %s', len(groups), {k: [str(x) for x in v] for k,v in groups.items()})
     if conflicts or errors:
         raise SystemExit(2)
 
