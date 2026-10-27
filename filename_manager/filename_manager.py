@@ -8,7 +8,7 @@ import datetime as dt
 import logging
 import os
 import re
-from filename_normalize import load_config, normalize, duplicate_groups, sanitize
+from filename_normalize import load_config, normalize, duplicate_groups, sanitize, is_archive_filename
 from pathlib import Path
 
 
@@ -165,6 +165,8 @@ def main():
     logging.info('Directory=%s action=%s apply=%s case=%s recursive=%s universal_edge_cleanup=True', root, args.action, args.apply, args.case, not args.no_recursive)
     files = []
     for current, dirs, names in os.walk(root, followlinks=False):
+        # Never process generated logs, even if logs live under the input tree.
+        dirs[:] = [d for d in dirs if (Path(current) / d).resolve() != log_dir and log_dir not in (Path(current) / d).resolve().parents]
         if not args.include_hidden:
             dirs[:] = [d for d in dirs if not d.startswith('.')]
         if args.no_recursive:
@@ -174,6 +176,8 @@ def main():
                 continue
             source = Path(current) / name
             if source.is_symlink() or not source.is_file():
+                continue
+            if is_archive_filename(source.name):
                 continue
             files.append(source)
     files.sort()

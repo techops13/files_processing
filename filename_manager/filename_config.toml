@@ -21,3 +21,7 @@ replace_plus = true
 replace_dense_hyphens = true
 dense_hyphen_min_tokens = 4
 # Dense hyphens are proposals requiring review and never auto-applied.
+
+[archive_protection]
+# Mandatory safety rule: archive files, including multipart volumes, are always skipped.
+skip_all_archive_files = true

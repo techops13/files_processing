@@ -227,3 +227,9 @@ invent authors or automatically guess capitalization.
 
 **Operational caveat:** This tool's rename planning is conservative but not transactional;
 use copies in a test directory and review logs before large-scale `--apply` runs.
+
+### v2.2.2 archive protection and bracket normalization
+
+All operations skip archives by default, including `.rar`, `.zip`, `.7z`, `.tar.*`, legacy archive formats and multipart volumes such as `.part1.rar` and `.7z.001`. They are not included in filename duplicate reports. Do not use this utility to rename archive sets.
+
+`--action normalize` recognizes already populated three-field metadata suffixes even when separated by spaces. For example, `Book [2026] [1st Edition] [].pdf` becomes `Book [2026][1st Edition][].pdf`. It does not append more empty fields. Existing adjacent fields are left unchanged. Dry run is the default.

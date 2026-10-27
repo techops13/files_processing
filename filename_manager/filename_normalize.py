@@ -7,7 +7,7 @@ from pathlib import Path
 YEAR = re.compile(r'^(?:18|19|20)\d{2}$')
 YEAR_AND_TEXT = re.compile(r'^((?:18|19|20)\d{2})(?:,\s*(.+))?$')
 EDITION = re.compile(r'^\d+(?:st|nd|rd|th)\s+(?:ed|edition)$|^revised edition$', re.I)
-BRACKET_END = re.compile(r'(?:\[[^\[\]]*\])+$')
+BRACKET_END = re.compile(r'(?:\s*\[[^\[\]]*\])+$')
 BRACKET = re.compile(r'\[([^\[\]]*)\]')
 PAREN = re.compile(r'\(([^()]*)\)')
 BY_AUTHOR = re.compile(r'^(.*?)\s+by\s+([^()\[\]]+?)\s*$', re.I)
@@ -46,13 +46,40 @@ def smart_case(s, cfg):
     return proposed, ['CASING_REVIEW'] if cfg['casing'].get('review_unknown_proper_names', True) else []
 
 
+# Compound archive suffixes and multipart volumes are never renamed automatically.
+ARCHIVE_SUFFIXES = (
+    '.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst', '.tar.lzma',
+    '.tgz', '.tbz', '.tbz2', '.txz', '.tzst',
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.zst', '.lzma',
+    '.cab', '.arj', '.lha', '.lzh', '.ace', '.iso', '.cpio', '.z', '.sit', '.sitx',
+)
+MULTIPART_ARCHIVE = re.compile(
+    r'(?i)(?:\.(?:7z|zip)\.\d{3,}|\.z\d{2,}|\.r\d{2,}|\.part\d+\.rar|\.\d{3,}\.rar)$'
+)
+
+
+def is_archive_filename(name):
+    """Archive/volume guard, checked before ANY filename-processing action."""
+    lowered = name.casefold()
+    return lowered.endswith(ARCHIVE_SUFFIXES) or bool(MULTIPART_ARCHIVE.search(name))
+
+
 def normalize(name, cfg):
     """Return (proposed filename, review codes). Existing fully formatted names remain byte-identical."""
+    if is_archive_filename(name):
+        return name, []
     stem, ext = split_name(name)
     # Complete convention, including empty [] fields, always takes priority.
     full = re.match(r'^.+? -- .+? - .+?\[[^\[\]]*\]\[[^\[\]]*\]\[[^\[\]]*\]$', stem)
-    if full or (BRACKET_END.search(stem) and len(BRACKET.findall(BRACKET_END.search(stem).group())) == 3):
+    bracket_match = BRACKET_END.search(stem)
+    if full:
         return name, []
+    if bracket_match and len(BRACKET.findall(bracket_match.group())) == 3:
+        # Normalize whitespace BETWEEN existing fields only. Never add new groups.
+        fields = BRACKET.findall(bracket_match.group())
+        prefix = stem[:bracket_match.start()].rstrip()
+        # Do not alter any contents, including user-curated notes.
+        return f'{prefix} [{fields[0]}][{fields[1]}][{fields[2]}]{ext}' if re.search(r'\s', bracket_match.group()[1:]) else name, []
     review = []
     if cfg['normalization'].get('convert_plus_separators') and '+' in stem:
         stem = stem.replace('+', ' ')
@@ -142,6 +169,8 @@ def duplicate_groups(paths):
 
 def sanitize(name, cfg):
     """Conservative stem-only cleanup; (proposal, review flags)."""
+    if is_archive_filename(name):
+        return name, []
     stem, ext = split_name(name)
     options = cfg.get('sanitization', {})
     if not options.get('enabled', True):

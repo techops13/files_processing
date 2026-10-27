@@ -51,3 +51,9 @@
 - Adds conservative casing review for uniformly upper/lowercase filenames, retaining questionable names during `--apply`.
 - Adds filename-based potential duplicate reporting (`--action duplicates`, `--report-duplicates`). No deletion or content hashing.
 - Existing remove/replace/prefix/suffix functionality remains available; normalization is opt-in.
+
+## [2.2.2] - 2026-10-27
+- Fixed three existing trailing metadata fields with whitespace (e.g., `[2026] [1st Edition] []`), removing only inter-field spacing rather than appending extra `[]` groups.
+- Made normalization idempotent when fields are already adjacent.
+- Excluded archive files and multipart volumes from ALL actions, including duplicate listing; originals are never renamed.
+- Added regression tests for metadata and archive guards.
